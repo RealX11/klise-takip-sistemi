@@ -133,20 +133,6 @@
             color: #007aff;
         }
 
-        .user-role {
-            background: #34c759;
-            color: white;
-            padding: 4px 12px;
-            border-radius: 8px;
-            font-size: 12px;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-
-        .user-role.viewer {
-            background: #ff9500;
-        }
-
         .logout-btn {
             background: #ff3b30;
             color: white;
@@ -388,23 +374,6 @@
             color: white;
         }
 
-        .readonly-notice {
-            background: #fffbf0;
-            border: 1px solid #ffc107;
-            color: #856404;
-            padding: 15px;
-            border-radius: 12px;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-weight: 500;
-        }
-
-        .readonly-notice .icon {
-            font-size: 20px;
-        }
-
         .modal {
             display: none;
             position: fixed;
@@ -546,15 +515,8 @@
             <h1>Klişe Ortaklık Takip Sistemi</h1>
             <div class="user-info">
                 <span class="user-name" id="userName"></span>
-                <span class="user-role" id="userRole"></span>
                 <button class="logout-btn" onclick="logout()">Çıkış</button>
             </div>
-        </div>
-
-        <!-- Viewer Uyarısı -->
-        <div id="readonlyNotice" class="readonly-notice" style="display: none;">
-            <span class="icon">👁️</span>
-            <span>Sadece görüntüleme yetkisine sahipsiniz. Veri ekleme, düzenleme veya silme işlemleri yapılamaz.</span>
         </div>
 
         <div class="stats-container">
@@ -594,16 +556,11 @@
                 </div>
             </div>
 
-            <div class="action-buttons" id="adminActions">
+            <div class="action-buttons">
                 <button class="btn btn-primary" onclick="openAddModal()">Yeni Klişe Ekle</button>
                 <button class="btn btn-success" onclick="exportData()">Veri Dışa Aktar</button>
                 <button class="btn btn-warning" onclick="importData()">Veri İçe Aktar</button>
                 <button class="btn btn-danger" onclick="clearAllData()">Tüm Veriyi Temizle</button>
-            </div>
-
-            <!-- Viewer için sadece export butonu -->
-            <div class="action-buttons" id="viewerActions" style="display: none;">
-                <button class="btn btn-success" onclick="exportData()">Veri Dışa Aktar</button>
             </div>
         </div>
 
@@ -625,7 +582,7 @@
                         <th>Bıçak Ölçüsü</th>
                         <th>Klişe Türü</th>
                         <th>Açıklama</th>
-                        <th id="actionsHeader">İşlemler</th>
+                        <th>İşlemler</th>
                     </tr>
                 </thead>
                 <tbody id="dataTable">
@@ -694,7 +651,6 @@
         let currentTab = 'emboss';
         let editingId = null;
         let isOnline = true;
-        let userRole = 'viewer'; // Default to most restrictive
 
         // Sayfa yüklendiğinde
         document.addEventListener('DOMContentLoaded', function() {
@@ -705,60 +661,11 @@
         // Auth kontrolü
         async function checkAuth() {
             if (pb.authStore.isValid) {
-                await checkUserRole();
                 showMainApp();
                 await loadData();
                 setupRealtime();
             } else {
                 showLogin();
-            }
-        }
-
-        // Kullanıcı rolü kontrolü
-        async function checkUserRole() {
-            try {
-                const user = pb.authStore.model;
-                if (user) {
-                    // Kullanıcı bilgilerini yenile
-                    const userData = await pb.collection('users').getOne(user.id);
-                    userRole = userData.role || 'viewer';
-                    console.log('User role:', userRole);
-                }
-            } catch (error) {
-                console.error('Role check hatası:', error);
-                userRole = 'viewer'; // Güvenlik için default viewer
-            }
-        }
-
-        // Admin yetkisi kontrolü
-        function isAdmin() {
-            return userRole === 'admin';
-        }
-
-        // UI elementlerini role göre ayarla
-        function setupRoleBasedUI() {
-            const readonlyNotice = document.getElementById('readonlyNotice');
-            const adminActions = document.getElementById('adminActions');
-            const viewerActions = document.getElementById('viewerActions');
-            const actionsHeader = document.getElementById('actionsHeader');
-            const userRoleSpan = document.getElementById('userRole');
-
-            if (isAdmin()) {
-                // Admin kullanıcı
-                readonlyNotice.style.display = 'none';
-                adminActions.style.display = 'flex';
-                viewerActions.style.display = 'none';
-                actionsHeader.style.display = 'table-cell';
-                userRoleSpan.textContent = 'Admin';
-                userRoleSpan.className = 'user-role';
-            } else {
-                // Viewer kullanıcı
-                readonlyNotice.style.display = 'flex';
-                adminActions.style.display = 'none';
-                viewerActions.style.display = 'flex';
-                actionsHeader.style.display = 'none';
-                userRoleSpan.textContent = 'Viewer';
-                userRoleSpan.className = 'user-role viewer';
             }
         }
 
@@ -768,10 +675,10 @@
             document.getElementById('kliseForm').addEventListener('submit', handleKliseSubmit);
             document.getElementById('fileInput').addEventListener('change', handleFileImport);
             
-            // Klavye kısayolları (sadece admin için)
+            // Klavye kısayolları
             document.addEventListener('keydown', function(e) {
                 if (e.key === 'Escape') closeModal();
-                if (e.ctrlKey && e.key === 'n' && isAdmin()) {
+                if (e.ctrlKey && e.key === 'n') {
                     e.preventDefault();
                     openAddModal();
                 }
@@ -799,7 +706,6 @@
                 const password = document.getElementById('password').value;
                 
                 await pb.collection('users').authWithPassword(email, password);
-                await checkUserRole();
                 
                 showMainApp();
                 await loadData();
@@ -817,7 +723,6 @@
         // Logout
         function logout() {
             pb.authStore.clear();
-            userRole = 'viewer';
             showLogin();
             currentData = [];
             updateStats();
@@ -835,7 +740,6 @@
             document.getElementById('loginContainer').style.display = 'none';
             document.getElementById('mainContainer').style.display = 'block';
             document.getElementById('userName').textContent = pb.authStore.model?.name || pb.authStore.model?.email;
-            setupRoleBasedUI();
         }
 
         // Veri yükleme
@@ -990,14 +894,6 @@
                 const row = document.createElement('tr');
                 const isKodlari = item.isKodlari || [];
                 
-                // Admin ise düzenleme butonları göster, viewer ise gösterme
-                const actionButtons = isAdmin() ? `
-                    <div class="action-btns">
-                        <button class="action-btn edit-btn" onclick="editKlise('${item.id}')">Düzenle</button>
-                        <button class="action-btn delete-btn" onclick="deleteKlise('${item.id}')">Sil</button>
-                    </div>
-                ` : '';
-                
                 row.innerHTML = `
                     <td><strong>${item.kliseKodu}</strong></td>
                     <td>
@@ -1009,19 +905,19 @@
                     <td>${item.bicakOlcusu}</td>
                     <td><span class="job-code-tag" style="background: ${item.kliseTuru === 'Emboss' ? '#007aff' : '#34c759'}">${item.kliseTuru}</span></td>
                     <td>${item.aciklama || '-'}</td>
-                    ${isAdmin() ? `<td>${actionButtons}</td>` : ''}
+                    <td>
+                        <div class="action-btns">
+                            <button class="action-btn edit-btn" onclick="editKlise('${item.id}')">Düzenle</button>
+                            <button class="action-btn delete-btn" onclick="deleteKlise('${item.id}')">Sil</button>
+                        </div>
+                    </td>
                 `;
                 tbody.appendChild(row);
             });
         }
 
-        // Modal açma/kapama (sadece admin)
+        // Modal açma/kapama
         function openAddModal() {
-            if (!isAdmin()) {
-                alert('Bu işlem için yetkiniz bulunmamaktadır.');
-                return;
-            }
-            
             editingId = null;
             document.getElementById('modalTitle').textContent = 'Yeni Klişe Ekle';
             document.getElementById('kliseForm').reset();
@@ -1034,13 +930,8 @@
             document.getElementById('kliseModal').style.display = 'none';
         }
 
-        // Klişe düzenleme (sadece admin)
+        // Klişe düzenleme
         async function editKlise(id) {
-            if (!isAdmin()) {
-                alert('Bu işlem için yetkiniz bulunmamaktadır.');
-                return;
-            }
-            
             const item = currentData.find(k => k.id === id);
             if (!item) return;
 
@@ -1055,13 +946,8 @@
             document.getElementById('kliseModal').style.display = 'block';
         }
 
-        // Klişe silme (sadece admin)
+        // Klişe silme
         async function deleteKlise(id) {
-            if (!isAdmin()) {
-                alert('Bu işlem için yetkiniz bulunmamaktadır.');
-                return;
-            }
-            
             if (!confirm('Bu klişeyi silmek istediğinizden emin misiniz?')) return;
 
             try {
@@ -1073,14 +959,9 @@
             }
         }
 
-        // Klişe kaydetme (sadece admin)
+        // Klişe kaydetme
         async function handleKliseSubmit(e) {
             e.preventDefault();
-            
-            if (!isAdmin()) {
-                alert('Bu işlem için yetkiniz bulunmamaktadır.');
-                return;
-            }
             
             const saveBtn = document.getElementById('saveBtn');
             const errorDiv = document.getElementById('modalError');
@@ -1121,7 +1002,7 @@
             }
         }
 
-        // Veri dışa aktarma (hem admin hem viewer)
+        // Veri dışa aktarma
         function exportData() {
             const dataToExport = currentData.map(item => {
                 const { id, created, updated, ...exportItem } = item;
@@ -1137,22 +1018,12 @@
             link.click();
         }
 
-        // Veri içe aktarma (sadece admin)
+        // Veri içe aktarma
         function importData() {
-            if (!isAdmin()) {
-                alert('Bu işlem için yetkiniz bulunmamaktadır.');
-                return;
-            }
-            
             document.getElementById('fileInput').click();
         }
 
         async function handleFileImport(e) {
-            if (!isAdmin()) {
-                alert('Bu işlem için yetkiniz bulunmamaktadır.');
-                return;
-            }
-            
             const file = e.target.files[0];
             if (!file) return;
 
@@ -1178,12 +1049,8 @@
             e.target.value = '';
         }
 
-        // Toplu veri içe aktarma (sadece admin)
+        // Toplu veri içe aktarma
         async function batchImportData(importedData) {
-            if (!isAdmin()) {
-                throw new Error('Bu işlem için yetkiniz bulunmamaktadır.');
-            }
-            
             let successCount = 0;
             
             for (const item of importedData) {
@@ -1204,13 +1071,8 @@
             return successCount;
         }
 
-        // Tüm veriyi temizleme (sadece admin)
+        // Tüm veriyi temizleme
         async function clearAllData() {
-            if (!isAdmin()) {
-                alert('Bu işlem için yetkiniz bulunmamaktadır.');
-                return;
-            }
-            
             if (!confirm('Tüm veriler silinecek. Bu işlem geri alınamaz. Devam edilsin mi?')) return;
             if (!confirm('Emin misiniz? Bu işlem tüm klişe verilerini kalıcı olarak silecek.')) return;
 
@@ -1243,13 +1105,8 @@
             }
         }, 5000);
 
-        // Başlangıç verisi ekleme (sadece geliştirme için - admin only)
+        // Başlangıç verisi ekleme (sadece geliştirme için)
         async function addSampleData() {
-            if (!isAdmin()) {
-                console.log('Sample data sadece admin kullanıcılar tarafından eklenebilir.');
-                return;
-            }
-            
             const sampleData = [
                 {
                     kliseKodu: "EMB-FB8",
@@ -1283,7 +1140,9 @@
             }
         }
 
-        // Geliştirme amacıyla - sadece admin kullanıcılar için
+        // Geliştirme amacıyla - sadece ilk kurulumda çalıştırın
+        // window.addSampleData = addSampleData;
+        // Geliştirme amacıyla - sadece ilk kurulumda çalıştırın
         // window.addSampleData = addSampleData;
     </script>
 
@@ -1307,7 +1166,7 @@
       </svg>
       
       <p style="margin:0 0 5px 0;">© 2025 <strong>MRT Systems</strong> – Developed & Crafted by Murat</p>
-      <p style="margin:0;font-size:12px;color:#86868b;">5 Eylül 2025, 15:45 - V2 (Role-Based Access Control)</p>
+      <p style="margin:0;font-size:12px;color:#86868b;">4 Eylül 2025, 14:30 - V1</p>
     </div>
 </body>
 </html>

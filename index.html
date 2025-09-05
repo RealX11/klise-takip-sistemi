@@ -364,6 +364,20 @@
             font-weight: 500;
         }
 
+        .history-btn {
+            background: #007aff;
+            color: white;
+            min-width: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .history-btn:hover {
+            background: #0056b3;
+            transform: scale(1.1);
+        }
+
         .edit-btn {
             background: #ff9500;
             color: white;
@@ -449,6 +463,49 @@
             padding: 10px;
             border-radius: 8px;
             margin-bottom: 15px;
+        }
+
+        .history-item {
+            padding: 15px;
+            border: 1px solid #f0f0f0;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            background: #fafafa;
+        }
+
+        .history-item .action-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .history-item .action-badge.created {
+            background: #e8f5e8;
+            color: #2e7d32;
+        }
+
+        .history-item .action-badge.updated {
+            background: #fff3e0;
+            color: #f57c00;
+        }
+
+        .history-item .action-badge.deleted {
+            background: #ffebee;
+            color: #d32f2f;
+        }
+
+        .history-item .timestamp {
+            color: #86868b;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+
+        .history-item .user-name {
+            font-weight: 600;
+            color: #007aff;
         }
 
         @media (max-width: 768px) {
@@ -538,6 +595,7 @@
             <div class="tabs">
                 <button class="tab-btn active" onclick="switchTab('emboss')">Emboss Listesi</button>
                 <button class="tab-btn" onclick="switchTab('lak')">Lak Klişe Ortaklıkları</button>
+                <button class="tab-btn" onclick="switchTab('logs')">Sistem Günlüğü</button>
             </div>
 
             <div class="filters">
@@ -573,21 +631,32 @@
                 </div>
             </div>
             <div id="loadingSpinner" class="loading" style="display: none;">Veriler yükleniyor...</div>
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>Klişe Kodu</th>
-                        <th>Ortak İş Kodları</th>
-                        <th>İş Sayısı</th>
-                        <th>Bıçak Ölçüsü</th>
-                        <th>Klişe Türü</th>
-                        <th>Açıklama</th>
-                        <th>İşlemler</th>
-                    </tr>
-                </thead>
-                <tbody id="dataTable">
-                </tbody>
-            </table>
+            
+            <!-- Regular table view -->
+            <div id="regularTableView">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Klişe Kodu</th>
+                            <th>Ortak İş Kodları</th>
+                            <th>İş Sayısı</th>
+                            <th>Bıçak Ölçüsü</th>
+                            <th>Klişe Türü</th>
+                            <th>Açıklama</th>
+                            <th>İşlemler</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dataTable">
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Logs view -->
+            <div id="logsView" style="display: none;">
+                <div id="globalLogsContainer">
+                    <!-- Global logs will be populated here -->
+                </div>
+            </div>
         </div>
     </div>
 
@@ -640,6 +709,22 @@
         </div>
     </div>
 
+    <!-- Action History Modal -->
+    <div id="historyModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="historyModalTitle">Klişe İşlem Geçmişi</h3>
+                <button class="close" onclick="closeHistoryModal()">&times;</button>
+            </div>
+            <div id="historyLoadingSpinner" class="loading" style="display: none;">İşlem geçmişi yükleniyor...</div>
+            <div id="historyContent">
+                <div id="historyList" style="max-height: 400px; overflow-y: auto;">
+                    <!-- Action history items will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
     <input type="file" id="fileInput" accept=".json" style="display: none;">
 
     <script>
@@ -677,18 +762,17 @@
             
             // Klavye kısayolları
             document.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape') closeModal();
+                if (e.key === 'Escape') {
+                    closeModal();
+                    closeHistoryModal();
+                }
                 if (e.ctrlKey && e.key === 'n') {
                     e.preventDefault();
                     openAddModal();
                 }
             });
 
-            // Modal dışına tıklama
-            window.onclick = function(event) {
-                const modal = document.getElementById('kliseModal');
-                if (event.target === modal) closeModal();
-            }
+            // Modal dışına tıklama - handled in enhanced version below
         }
 
         // Login işlemi
@@ -836,13 +920,25 @@
             event.target.classList.add('active');
             
             const title = document.getElementById('tableTitle');
+            const regularView = document.getElementById('regularTableView');
+            const logsView = document.getElementById('logsView');
+            
             if (tab === 'emboss') {
                 title.textContent = 'Emboss Listesi ve Ortaklıklar';
-            } else {
+                regularView.style.display = 'block';
+                logsView.style.display = 'none';
+                filterTable();
+            } else if (tab === 'lak') {
                 title.textContent = 'Lak Klişe Ortaklıkları';
+                regularView.style.display = 'block';
+                logsView.style.display = 'none';
+                filterTable();
+            } else if (tab === 'logs') {
+                title.textContent = 'Sistem Günlüğü - Kritik İşlemler';
+                regularView.style.display = 'none';
+                logsView.style.display = 'block';
+                loadGlobalLogs();
             }
-            
-            filterTable();
         }
 
         // İstatistik güncelleme
@@ -907,6 +1003,7 @@
                     <td>${item.aciklama || '-'}</td>
                     <td>
                         <div class="action-btns">
+                            <button class="action-btn history-btn" onclick="showActionHistory('${item.id}', '${item.kliseKodu}')" title="İşlem Geçmişi">📜</button>
                             <button class="action-btn edit-btn" onclick="editKlise('${item.id}')">Düzenle</button>
                             <button class="action-btn delete-btn" onclick="deleteKlise('${item.id}')">Sil</button>
                         </div>
@@ -1104,6 +1201,128 @@
                 updateSyncStatus(false);
             }
         }, 5000);
+
+        // Action History Functions
+        async function showActionHistory(kliseId, kliseKodu) {
+            const modal = document.getElementById('historyModal');
+            const title = document.getElementById('historyModalTitle');
+            const spinner = document.getElementById('historyLoadingSpinner');
+            const content = document.getElementById('historyList');
+            
+            title.textContent = `${kliseKodu} - İşlem Geçmişi`;
+            modal.style.display = 'block';
+            spinner.style.display = 'block';
+            content.innerHTML = '';
+            
+            try {
+                const records = await pb.collection('Eylem_Penceresi').getFullList({
+                    filter: `klise_id = "${kliseId}"`,
+                    sort: '-timestamp',
+                });
+                
+                if (records.length === 0) {
+                    content.innerHTML = '<p style="text-align: center; color: #86868b; padding: 20px;">Bu klişe için henüz işlem kaydı bulunmuyor.</p>';
+                } else {
+                    content.innerHTML = records.map(record => `
+                        <div class="history-item">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span class="action-badge ${record.action}">${getActionText(record.action)}</span>
+                                <span class="timestamp">${formatTimestamp(record.timestamp)}</span>
+                            </div>
+                            <div style="margin-top: 8px;">
+                                <span class="user-name">${record.user_name || 'Bilinmeyen Kullanıcı'}</span>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+            } catch (error) {
+                console.error('Action history yüklenirken hata:', error);
+                content.innerHTML = '<p style="text-align: center; color: #ff3b30; padding: 20px;">İşlem geçmişi yüklenirken bir hata oluştu.</p>';
+            } finally {
+                spinner.style.display = 'none';
+            }
+        }
+
+        function closeHistoryModal() {
+            document.getElementById('historyModal').style.display = 'none';
+        }
+
+        async function loadGlobalLogs() {
+            const container = document.getElementById('globalLogsContainer');
+            const spinner = document.getElementById('loadingSpinner');
+            
+            spinner.style.display = 'block';
+            container.innerHTML = '';
+            
+            try {
+                // Fetch only critical actions: created and deleted
+                const records = await pb.collection('Eylem_Penceresi').getFullList({
+                    filter: 'action = "created" || action = "deleted"',
+                    sort: '-timestamp',
+                    expand: 'klise_id',
+                });
+                
+                if (records.length === 0) {
+                    container.innerHTML = '<p style="text-align: center; color: #86868b; padding: 40px;">Henüz kritik işlem kaydı bulunmuyor.</p>';
+                } else {
+                    container.innerHTML = '<div style="display: grid; gap: 10px;">' + records.map(record => `
+                        <div class="history-item">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <span class="action-badge ${record.action}">${getActionText(record.action)}</span>
+                                <span class="timestamp">${formatTimestamp(record.timestamp)}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <strong>${record.expand?.klise_id?.kliseKodu || 'Bilinmeyen Klişe'}</strong>
+                                    <span style="color: #86868b; margin-left: 10px;">
+                                        (${record.expand?.klise_id?.kliseTuru || 'Bilinmeyen Tür'})
+                                    </span>
+                                </div>
+                                <span class="user-name">${record.user_name || 'Bilinmeyen Kullanıcı'}</span>
+                            </div>
+                        </div>
+                    `).join('') + '</div>';
+                }
+            } catch (error) {
+                console.error('Global logs yüklenirken hata:', error);
+                container.innerHTML = '<p style="text-align: center; color: #ff3b30; padding: 40px;">Sistem günlüğü yüklenirken bir hata oluştu.</p>';
+            } finally {
+                spinner.style.display = 'none';
+            }
+        }
+
+        function getActionText(action) {
+            switch(action) {
+                case 'created': return 'Oluşturuldu';
+                case 'updated': return 'Güncellendi';
+                case 'deleted': return 'Silindi';
+                default: return action;
+            }
+        }
+
+        function formatTimestamp(timestamp) {
+            try {
+                const date = new Date(timestamp);
+                return date.toLocaleString('tr-TR', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            } catch (error) {
+                return timestamp;
+            }
+        }
+
+        // Enhanced modal click handling for history modal
+        window.onclick = function(event) {
+            const kliseModal = document.getElementById('kliseModal');
+            const historyModal = document.getElementById('historyModal');
+            
+            if (event.target === kliseModal) closeModal();
+            if (event.target === historyModal) closeHistoryModal();
+        }
 
         // Başlangıç verisi ekleme (sadece geliştirme için)
         async function addSampleData() {
